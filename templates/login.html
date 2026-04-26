@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+  login.html — User Login Page
+  =============================
+  Served at GET /login.
+  Submits credentials to POST /login, which Flask validates against
+  the hashed password stored in the 'users' table.
+
+  On success → Flask opens a session and redirects to "/".
+  On failure → Flask returns an inline error message.
+
+  Styling mirrors register.html for visual consistency:
+  centred card on a soft teal background, pill inputs, and a
+  salmon-pink submit button.
+-->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login — Chat App</title>
+    <style>
+        /* ── Page layout ──
+           Full-viewport flex container that centres the card
+           both horizontally and vertically. */
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #eef5f5;           /* soft teal-white background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        /* ── Card ──
+           White rounded card with a subtle drop shadow.
+           Fixed width keeps the layout consistent across viewports. */
+        .box {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            text-align: center;
+            width: 300px;
+        }
+
+        /* ── Inputs ──
+           Full-width pill-shaped fields with comfortable padding.
+           box-sizing: border-box ensures padding doesn't exceed the set width. */
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+
+        /* ── Submit button ──
+           Soft salmon-pink fill to match the app's colour palette.
+           Darkens slightly on hover for clear feedback. */
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #F7CBCA;           /* salmon-pink — matches index.html palette */
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #3a4f4f;               /* dark teal text for legibility */
+        }
+        button:hover { background: #e5bcbb; }
+    </style>
+</head>
+<body>
+    <!-- ── Login card ─────────────────────────────────────────────── -->
+    <div class="box">
+        <h2>Welcome back! </h2>
+
+        <!--
+          Form submits via POST to /login.
+          Flask reads request.form['email'] and request.form['password'].
+          'required' attributes provide basic client-side validation.
+        -->
+        <form method="POST" action="/login">
+            <input type="email"    name="email"    placeholder="Email address" required>
+            <input type="password" name="password" placeholder="Password"      required>
+            <button type="submit">Log in</button>
+        </form>
+
+        <!-- Navigation link for users who don't have an account yet -->
+        <p style="font-size: 0.8rem; margin-top: 20px;">
+            No account yet? <a href="/register">Sign up</a>
+        </p>
+    </div>
+</body>
+</html>
