@@ -19,8 +19,6 @@ Typical request flow:
   6. Disconnect / leave events update the online-users tracker.
 """
 
-import eventlet
-eventlet.monkey_patch()
 
 from flask import Flask, render_template, request, redirect, url_for, session
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
