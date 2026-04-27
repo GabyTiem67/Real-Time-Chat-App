@@ -1,45 +1,18 @@
 <!DOCTYPE html>
-<!--
-  index.html — Main Chat Interface
-  =================================
-  This is the protected page served at "/" after a successful login.
-  It is a Jinja2 template rendered by Flask, which injects:
-    - {{ username }} — the logged-in user's display name, used by JS to
-      distinguish "my" bubbles from others'.
-
-  The page has two views managed purely with JS (no page reload):
-    1. Room-join panel  (#choix_room)  — shown on first load.
-    2. Chat zone        (#zone_chat)   — shown after joining a room.
-
-  Real-time communication is handled by Socket.IO (loaded from CDN).
-  Socket events used:
-    Emitted  →  'join', 'quitter_salon', 'send_message'
-    Received ←  'charger_historique', 'receive_message',
-                'system_message', 'maj_utilisateurs', 'erreur'
--->
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Chat 💬</title>
-
-    <!-- Google Fonts: DM Sans (body) + DM Serif Display (headings) -->
+    <title>Mon Chat 💬</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
-
-    <!-- Socket.IO client library — must match the server-side version -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
-
     <style>
         /* ═══════════════════════════════════════════════════
            DESIGN TOKENS
-           All colours, radii, shadows, and easing curves
-           are defined here as CSS custom properties so they
-           can be reused consistently throughout the file.
         ═══════════════════════════════════════════════════ */
         :root {
-            /* Brand palette */
             --pink:      #F7CBCA;
             --warm-gray: #D0C9C9;
             --off-white: #F1F7F7;
@@ -47,40 +20,32 @@
             --cyan:      #C0D7D6;
             --forest:    #5D6B6B;
 
-            /* Semantic text colours */
-            --text:      #3a4f4f;   /* primary copy */
-            --text-soft: #7a9090;   /* secondary / subdued */
-            --text-muted:#a8bcbc;   /* placeholders, labels */
+            --text:      #3a4f4f;
+            --text-soft: #7a9090;
+            --text-muted:#a8bcbc;
 
-            /* "Liquid Glass" effect tokens
-               High opacity + LOW blur (6px max) = crisp, not foggy.
-               Increase --glass-blur for a frosted effect. */
+            /* Liquid Glass: high opacity + LOW blur = crisp, not foggy */
             --glass-bg:     rgba(245, 250, 250, 0.82);
             --glass-border: rgba(255, 255, 255, 0.72);
             --glass-top:    inset 0 1px 0 rgba(255, 255, 255, 0.82);
-            --glass-blur:   blur(6px);
+            --glass-blur:   blur(6px);   /* 6px max — avoid fog */
 
-            /* Shadow scale */
             --shadow-sm: 0 2px 10px rgba(55, 75, 75, 0.07);
             --shadow-md: 0 8px 26px rgba(55, 75, 75, 0.09);
             --shadow-lg: 0 20px 48px rgba(55, 75, 75, 0.11);
 
-            /* Border radii */
-            --r-pill:   999px;  /* fully rounded pill shape */
-            --r-xl:     28px;   /* large cards / panels */
-            --r-lg:     20px;
-            --r-bubble: 20px;   /* chat bubble corners */
+            --r-pill: 999px;
+            --r-xl:   28px;
+            --r-lg:   20px;
+            --r-bubble: 20px;
 
-            /* Animation easing curves */
-            --spring: cubic-bezier(.22, .9, .26, 1);   /* bouncy entry */
-            --ease:   cubic-bezier(.16, 1, .3, 1);     /* smooth out */
-            --t:      190ms;                            /* default duration */
+            --spring: cubic-bezier(.22, .9, .26, 1);
+            --ease:   cubic-bezier(.16, 1, .3, 1);
+            --t: 190ms;
         }
 
         /* ═══════════════════════════════════════════════════
            RESET + BASE
-           Universal box-sizing reset; html/body fill the
-           viewport so we can control height precisely.
         ═══════════════════════════════════════════════════ */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; }
@@ -88,9 +53,7 @@
         body {
             font-family: 'DM Sans', sans-serif;
             color: var(--text);
-            overflow: hidden; /* prevent body scroll; inner list scrolls instead */
-
-            /* Layered radial + linear gradients create a soft ambient background */
+            overflow: hidden;
             background:
                 radial-gradient(ellipse 68% 52% at 4%   0%,  #f9d8d7 0%, transparent 50%),
                 radial-gradient(ellipse 52% 42% at 97%  4%,  #d8ecea 0%, transparent 46%),
@@ -99,9 +62,7 @@
             background-attachment: fixed;
         }
 
-        /* ── Ambient orbs ──
-           Purely decorative blobs rendered via ::before / ::after
-           pseudo-elements.  z-index: 0 places them behind all content. */
+        /* Ambient orbs — z-index 0, behind everything */
         body::before, body::after {
             content: "";
             position: fixed;
@@ -110,14 +71,12 @@
             z-index: 0;
         }
         body::before {
-            /* Top-right pink orb */
             width: 360px; height: 360px;
             top: -110px; right: -75px;
             background: radial-gradient(circle, rgba(247,203,202,0.32) 0%, transparent 65%);
             animation: orbDrift 22s ease-in-out infinite;
         }
         body::after {
-            /* Bottom-left cyan orb (drifts in reverse for variety) */
             width: 420px; height: 420px;
             bottom: -150px; left: -85px;
             background: radial-gradient(circle, rgba(192,215,214,0.30) 0%, transparent 65%);
@@ -126,15 +85,13 @@
 
         /* ═══════════════════════════════════════════════════
            APP SHELL
-           Full-height flex column: header is fixed-size
-           (flex-shrink: 0) and the content frame expands to
-           fill whatever space remains.
+           Flex column, full height — header fixed, content grows
         ═══════════════════════════════════════════════════ */
         .app-shell {
             position: relative;
             z-index: 1;
             height: 100vh;
-            height: 100dvh;   /* dynamic viewport height on mobile */
+            height: 100dvh;
             display: flex;
             flex-direction: column;
             gap: 14px;
@@ -143,8 +100,6 @@
 
         /* ═══════════════════════════════════════════════════
            LIQUID GLASS BASE CLASS
-           Reusable mixin-style class applied to any panel
-           that should have the frosted-glass look.
         ═══════════════════════════════════════════════════ */
         .glass {
             background: var(--glass-bg);
@@ -156,12 +111,9 @@
 
         /* ═══════════════════════════════════════════════════
            HEADER
-           Sits at the top of the app shell. Contains the
-           room title, online-member info, status pill, and
-           the leave-room button.
         ═══════════════════════════════════════════════════ */
         #header {
-            flex-shrink: 0;   /* never squish — always full height */
+            flex-shrink: 0;
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -175,7 +127,7 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            min-width: 0;   /* allow text to truncate with ellipsis */
+            min-width: 0;
         }
 
         .header-icon {
@@ -188,7 +140,7 @@
             box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.78);
         }
 
-        .header-text { min-width: 0; }  /* needed for child overflow:hidden to work */
+        .header-text { min-width: 0; }
 
         .header-eyebrow {
             font-size: 0.65rem;
@@ -199,7 +151,6 @@
             margin-bottom: 1px;
         }
 
-        /* Room name — fluid font size so it scales between viewports */
         #titre_room {
             font-size: clamp(1rem, 2vw, 1.35rem);
             font-weight: 700;
@@ -221,7 +172,6 @@
             text-overflow: ellipsis;
         }
 
-        /* Live-status pill shown in the top-right of the header */
         .status-pill {
             flex-shrink: 0;
             display: inline-flex;
@@ -239,7 +189,6 @@
             color: var(--forest);
         }
 
-        /* Animated dot inside the status pill */
         .status-dot {
             width: 7px; height: 7px;
             border-radius: 50%;
@@ -249,13 +198,11 @@
         }
 
         /* ═══════════════════════════════════════════════════
-           CONTENT FRAME
-           Fills all vertical space not taken by the header.
-           Children (#choix_room, #zone_chat) fill it 100%.
+           CONTENT FRAME — takes all remaining vertical space
         ═══════════════════════════════════════════════════ */
         .content-frame {
             flex: 1;
-            min-height: 0;   /* CRITICAL: allows flex children to shrink & scroll */
+            min-height: 0;   /* allow shrink */
             display: flex;
             align-items: stretch;
         }
@@ -264,11 +211,10 @@
 
         /* ═══════════════════════════════════════════════════
            ROOM JOIN PANEL
-           Centered card shown before the user picks a room.
         ═══════════════════════════════════════════════════ */
         #choix_room {
             max-width: 500px;
-            margin: auto;           /* centre horizontally + vertically */
+            margin: auto;
             align-self: center;
             padding: 36px 34px;
             border-radius: 30px;
@@ -284,7 +230,6 @@
             margin-bottom: 10px;
         }
 
-        /* Serif display heading for the join panel */
         .panel-title {
             font-family: 'DM Serif Display', serif;
             font-size: clamp(1.85rem, 3.8vw, 2.5rem);
@@ -293,7 +238,6 @@
             color: var(--forest);
             margin-bottom: 12px;
         }
-        /* Italic portion of the heading */
         .panel-title em {
             font-style: italic;
             color: rgba(93,107,107,0.70);
@@ -308,7 +252,6 @@
             margin-bottom: 26px;
         }
 
-        /* Row containing the room-name input + join button */
         .room-entry {
             display: flex;
             align-items: center;
@@ -316,9 +259,7 @@
         }
 
         /* ═══════════════════════════════════════════════════
-           INPUTS
-           Solid, slightly opaque background keeps text crisp
-           even over the blurred glass panels.
+           INPUTS — solid background, text always crisp
         ═══════════════════════════════════════════════════ */
         .field-shell { flex: 1; }
 
@@ -337,8 +278,6 @@
             transition: border-color var(--t) ease, box-shadow var(--t) ease, transform var(--t) ease;
         }
         input::placeholder { color: var(--text-muted); }
-
-        /* Focus state: cyan ring + subtle lift */
         input:focus {
             border-color: rgba(192,215,214,0.88);
             box-shadow:
@@ -350,8 +289,6 @@
 
         /* ═══════════════════════════════════════════════════
            BUTTONS
-           Gradient pill buttons with a spring hover lift and
-           scale-down active press.
         ═══════════════════════════════════════════════════ */
         button {
             flex-shrink: 0;
@@ -388,7 +325,6 @@
             filter: brightness(0.97);
         }
 
-        /* Send button — circular icon button in the message input bar */
         #btn_envoyer {
             width: 44px; height: 44px;
             padding: 0;
@@ -398,41 +334,38 @@
 
         /* ═══════════════════════════════════════════════════
            CHAT ZONE + SCROLL FIX
-           Every element in the flex chain needs min-height: 0
-           so the browser doesn't calculate an intrinsic height
-           and prevent the inner list from scrolling.
+           Critical: every container in the chain needs
+           min-height:0 to allow proper scroll behaviour
         ═══════════════════════════════════════════════════ */
         #zone_chat {
             display: flex;
             flex-direction: column;
-            min-height: 0;   /* CRITICAL */
+            min-height: 0;          /* ← CRITICAL */
         }
 
         .chat-surface {
             flex: 1;
-            min-height: 0;   /* CRITICAL */
+            min-height: 0;          /* ← CRITICAL */
             display: flex;
             flex-direction: column;
             gap: 10px;
             padding: 14px;
             border-radius: var(--r-xl);
-            overflow: hidden;   /* clip content to the rounded corners */
+            overflow: hidden;       /* clip border-radius */
         }
 
-        /* ── Scrollable message list ──
-           Only this element scrolls; everything else in the
-           flex chain is fixed in place. */
+        /* Scrollable messages list */
         #liste_messages {
             flex: 1;
-            min-height: 0;      /* CRITICAL */
-            overflow-y: auto;   /* CRITICAL: scroll happens here, not on body */
+            min-height: 0;          /* ← CRITICAL */
+            overflow-y: auto;       /* ← CRITICAL: scroll here */
             list-style: none;
             display: flex;
             flex-direction: column;
             gap: 10px;
             padding: 4px 2px 6px;
             scroll-behavior: smooth;
-            overscroll-behavior: contain;   /* prevent scroll chaining to the page */
+            overscroll-behavior: contain;
             scrollbar-width: thin;
             scrollbar-color: rgba(93,107,107,0.16) transparent;
         }
@@ -442,11 +375,9 @@
             background: rgba(93,107,107,0.15);
         }
 
-        /* ── Message input bar ──
-           flex-shrink: 0 is CRITICAL — without it, the bar can
-           be squished out of view as messages fill the list. */
+        /* Input bar — always visible, never squished */
         #zone_saisie {
-            flex-shrink: 0;
+            flex-shrink: 0;         /* ← CRITICAL: never collapse */
             display: flex;
             align-items: center;
             gap: 8px;
@@ -457,7 +388,6 @@
             box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.82);
         }
 
-        /* The text input inside the bar inherits the bar's background */
         #mon_message {
             background: transparent;
             border: none;
@@ -470,9 +400,6 @@
 
         /* ═══════════════════════════════════════════════════
            MESSAGE ROWS
-           Each message is a flex row: avatar + bubble stack.
-           "row-moi"   → my messages  (reversed, right-aligned)
-           "row-autre" → their messages (normal, left-aligned)
         ═══════════════════════════════════════════════════ */
         .msg-row {
             display: flex;
@@ -483,7 +410,6 @@
         .row-moi   { flex-direction: row-reverse; }
         .row-autre { flex-direction: row; }
 
-        /* ── Avatar circle ── */
         .avatar {
             flex-shrink: 0;
             width: 27px; height: 27px;
@@ -498,13 +424,9 @@
             box-shadow: 0 1px 5px rgba(55,75,75,0.10);
             user-select: none;
         }
-        /* My avatar: pink-warm-gray gradient */
         .avatar-moi   { background: linear-gradient(140deg, rgba(247,203,202,0.96), rgba(208,201,201,0.90)); }
-        /* Others' avatars: blue-cyan gradient */
         .avatar-autre { background: linear-gradient(140deg, rgba(213,230,229,0.96), rgba(192,215,214,0.90)); }
 
-        /* ── Bubble stack ──
-           Wraps the sender name label + one or more bubbles. */
         .bubble-stack {
             display: flex;
             flex-direction: column;
@@ -514,7 +436,6 @@
         .row-moi   .bubble-stack { align-items: flex-end; }
         .row-autre .bubble-stack { align-items: flex-start; }
 
-        /* Small sender name shown above others' bubbles (hidden for own messages) */
         .nom-auteur {
             font-size: 0.65rem;
             font-weight: 700;
@@ -525,8 +446,6 @@
             margin-bottom: 3px;
         }
 
-        /* ── System messages ──
-           Centred announcements ("Alice joined the room"). */
         .msg-systeme {
             align-self: center;
             font-size: 0.72rem;
@@ -540,8 +459,7 @@
             box-shadow: inset 0 1px 2px rgba(255,255,255,0.8);
         }
 
-        /* ── Chat bubbles ──
-           Liquid-glass tinted bubbles with a ::after sheen overlay. */
+        /* Bubble — liquid glass: colour-tinted, subtle shine */
         .bulle {
             position: relative;
             padding: 11px 15px;
@@ -552,7 +470,7 @@
             border: 1px solid rgba(255,255,255,0.60);
             overflow: hidden;
         }
-        /* Top-glass highlight — a thin translucent gradient at the top of each bubble */
+        /* Top-glass sheen */
         .bulle::after {
             content: "";
             position: absolute;
@@ -561,7 +479,6 @@
             pointer-events: none;
         }
 
-        /* My bubble: pink / warm-gray; sharpened bottom-right corner (tail illusion) */
         .bulle-moi {
             background: linear-gradient(148deg, rgba(247,203,202,0.90) 0%, rgba(208,201,201,0.82) 100%);
             color: #445656;
@@ -569,7 +486,6 @@
             box-shadow: 0 3px 12px rgba(247,203,202,0.50), 0 1px 3px rgba(55,75,75,0.06);
         }
 
-        /* Their bubble: blue / cyan; sharpened bottom-left corner (tail illusion) */
         .bulle-autre {
             background: linear-gradient(148deg, rgba(213,230,229,0.92) 0%, rgba(192,215,214,0.84) 100%);
             color: #3a5050;
@@ -579,8 +495,6 @@
 
         /* ═══════════════════════════════════════════════════
            EMPTY STATE
-           Shown when the message list is empty (no history yet).
-           pointer-events: none so it doesn't intercept clicks.
         ═══════════════════════════════════════════════════ */
         .empty-state {
             flex: 1;
@@ -596,445 +510,242 @@
         .empty-label { font-size: 0.82rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.05em; }
 
         /* ═══════════════════════════════════════════════════
-           KEYFRAME ANIMATIONS
+           ANIMATIONS
         ═══════════════════════════════════════════════════ */
-
-        /* Slow, gentle drift for the ambient background orbs */
         @keyframes orbDrift {
             0%, 100% { transform: translate(0,0); }
             50%       { transform: translate(10px, 16px); }
         }
-
-        /* Header slides down from above on page load */
         @keyframes slideDown {
             from { opacity: 0; transform: translateY(-14px); }
             to   { opacity: 1; transform: translateY(0); }
         }
-
-        /* Join panel fades up from slightly below */
         @keyframes fadeUp {
             from { opacity: 0; transform: translateY(18px); }
             to   { opacity: 1; transform: translateY(0); }
         }
-
-        /* Each new message entry: fade in + tiny upward travel */
         @keyframes msgIn {
             from { opacity: 0; transform: translateY(8px) scale(0.976); }
             to   { opacity: 1; transform: translateY(0) scale(1); }
         }
-
-        /* Pulsing glow ring around the status dot */
         @keyframes dotPulse {
             0%, 100% { box-shadow: 0 0 0 3px rgba(192,215,214,0.22); }
             50%       { box-shadow: 0 0 0 5px rgba(192,215,214,0.36); }
         }
-
-        /* Gentle float for the empty-state icon */
         @keyframes floatIcon {
             0%, 100% { transform: translateY(0); }
             50%       { transform: translateY(-7px); }
         }
 
         /* ═══════════════════════════════════════════════════
-           RESPONSIVE — narrow viewports (≤ 680px)
+           RESPONSIVE
         ═══════════════════════════════════════════════════ */
         @media (max-width: 680px) {
             .app-shell   { padding: 12px; gap: 12px; }
-            /* Stack header vertically on small screens */
             #header      { padding: 12px 14px; border-radius: 22px; flex-direction: column; align-items: flex-start; }
             .status-pill { align-self: flex-start; }
             #choix_room  { padding: 26px 20px; border-radius: 24px; }
             .panel-title { font-size: 1.75rem; }
             .chat-surface { padding: 12px; border-radius: 22px; }
-            /* Stack room-name input + button vertically */
             .room-entry  { flex-direction: column; }
             .room-entry button { width: 100%; }
-            /* Allow bubbles to use more screen width on mobile */
             .bubble-stack { max-width: 82%; }
         }
 
-        /* Respect the user's system preference for reduced motion */
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
         }
     </style>
 </head>
 <body>
-    <!-- ═══════════════════════════════════════════════════════════
-         APP SHELL
-         Top-level flex column that holds the header + content frame.
-    ═══════════════════════════════════════════════════════════ -->
     <div class="app-shell">
 
-        <!-- ── HEADER ──────────────────────────────────────────────
-             Always visible. Updated dynamically by JS when the user
-             joins / leaves a room.
-        ─────────────────────────────────────────────────────────── -->
+        <!-- HEADER -->
         <header id="header" class="glass">
             <div class="header-left">
-                <!-- Decorative icon tile -->
                 <div class="header-icon">💬</div>
-
                 <div class="header-text">
                     <div class="header-eyebrow">Private conversation space</div>
+                    <h2 id="titre_room">Accueil</h2>
+                    <p class="header-sub">Une interface douce, calme et en temps réel.</p>
 
-                    <!-- Room name — updated by JS to the joined room's name -->
-                    <h2 id="titre_room">Home</h2>
-
-                    <!-- Static tagline (first sub) -->
-                    <p class="header-sub">A calm, real-time messaging experience.</p>
-
-                    <!-- Dynamic member info — updated via 'maj_utilisateurs' Socket.IO event -->
-                    <p class="header-sub" id="membres_en_ligne">A calm, real-time messaging experience.</p>
+<p class="header-sub" id="membres_en_ligne">Une interface douce, calme et en temps réel.</p>
                 </div>
             </div>
-
             <div style="display: flex; gap: 10px; align-items: center;">
-                <!-- Live-room badge -->
                 <div class="status-pill">
                     <span class="status-dot"></span>
                     Live room
                 </div>
-
-                <!-- Leave-room button — hidden until the user joins a room -->
-                <button
-                    id="btn_quitter"
-                    onclick="leaveRoom()"
-                    style="display: none; font-size: 0.8rem; padding: 8px 14px;
-                           background: rgba(245,250,250,0.9);
-                           border: 1px solid var(--glass-border);
-                           color: var(--text-soft);">
-                    Leave 🚪
-                </button>
+                <button id="btn_quitter" onclick="quitterLeSalon()" style="display: none; font-size: 0.8rem; padding: 8px 14px; background: rgba(245,250,250,0.9); border: 1px solid var(--glass-border); color: var(--text-soft);">Sortir 🚪</button>
             </div>
         </header>
 
-        <!-- ── CONTENT FRAME ────────────────────────────────────────
-             Flex container that fills remaining vertical space.
-             At any time, exactly one child is visible:
-               • #choix_room  — before joining
-               • #zone_chat   — after joining
-        ─────────────────────────────────────────────────────────── -->
+        <!-- CONTENT FRAME -->
         <div class="content-frame">
 
-            <!-- ── ROOM JOIN PANEL ──────────────────────────────── -->
+            <!-- ROOM JOIN -->
             <div id="choix_room" class="glass">
                 <p class="panel-eyebrow">Room access</p>
-                <h3 class="panel-title">Join a<br><em>conversation</em></h3>
-                <p class="panel-copy">
-                    Enter a room name to find your shared space — clean, calm, and real-time.
-                </p>
+                <h3 class="panel-title">Rejoindre une<br><em>discussion</em></h3>
+                <p class="panel-copy">Entrez le nom d'un salon pour retrouver votre espace d'échange dans une ambiance propre, calme et premium.</p>
                 <div class="room-entry">
                     <div class="field-shell">
-                        <!-- Room name input — Enter key also triggers joinRoom() -->
-                        <input
-                            type="text"
-                            id="nom_room"
-                            placeholder="Room name (e.g. Project)"
-                            autocomplete="off">
+                        <input type="text" id="nom_room" placeholder="Nom du salon (ex: Projet)" autocomplete="off">
                     </div>
-                    <button type="button" onclick="joinRoom()">Join →</button>
+                    <button type="button" onclick="rejoindreRoom()">Rejoindre →</button>
                 </div>
             </div>
 
-            <!-- ── CHAT ZONE ─────────────────────────────────────────
-                 Hidden by default; shown after joining a room.
-                 Contains the scrollable message list + the input bar.
-            ─────────────────────────────────────────────────────── -->
+            <!-- CHAT ZONE -->
             <div id="zone_chat" style="display:none;">
                 <div class="chat-surface glass">
 
-                    <!-- Scrollable message list -->
                     <ul id="liste_messages">
-                        <!-- Empty-state placeholder shown while there are no messages -->
                         <li class="empty-state" id="empty-placeholder">
                             <span class="empty-icon">✦</span>
-                            <span class="empty-label">No messages yet</span>
+                            <span class="empty-label">Aucun message pour l'instant</span>
                         </li>
                     </ul>
 
-                    <!-- Message composition bar -->
                     <div id="zone_saisie">
                         <div class="field-shell">
-                            <!-- Enter key triggers sendMessage() -->
-                            <input
-                                type="text"
-                                id="mon_message"
-                                placeholder="Write a message…"
-                                autocomplete="off">
+                            <input type="text" id="mon_message" placeholder="Écrivez un message..." autocomplete="off">
                         </div>
-                        <!-- Send button — circular icon -->
-                        <button
-                            type="button"
-                            id="btn_envoyer"
-                            onclick="sendMessage()"
-                            aria-label="Send">↑</button>
+                        <button type="button" id="btn_envoyer" onclick="envoyerMessage()" aria-label="Envoyer">↑</button>
                     </div>
 
                 </div>
             </div>
 
-        </div><!-- /.content-frame -->
-    </div><!-- /.app-shell -->
+        </div>
+    </div>
 
-
-    <!-- ═══════════════════════════════════════════════════════════
-         JAVASCRIPT — Socket.IO client + UI logic
-         ─────────────────────────────────────────────────────────
-         All UI state is kept in two variables:
-           • username    — injected by Flask/Jinja2 at render time
-           • currentRoom — tracks which room the client is in
-    ═══════════════════════════════════════════════════════════ -->
     <script>
-        // Open the Socket.IO connection to the server.
         const socket = io();
-
-        // Username injected by Flask — used to colour/align our own bubbles.
         let username = "{{ username }}";
+        let roomActuelle = "";
 
-        // Tracks the room the user is currently in (empty string = no room).
-        let currentRoom = "";
-
-        // Ensure the chat zone is hidden on first load.
         document.getElementById('zone_chat').style.display = 'none';
 
+        function initials(name) { return name.slice(0, 2).toUpperCase(); }
 
-        // ── Utility helpers ─────────────────────────────────────
-
-        /**
-         * Returns the first two letters of a name, upper-cased.
-         * Used to generate initials for avatar circles.
-         * @param {string} name
-         * @returns {string}
-         */
-        function initials(name) {
-            return name.slice(0, 2).toUpperCase();
-        }
-
-        /**
-         * Removes the empty-state placeholder from the message list
-         * (called before inserting the first real message or history item).
-         */
         function clearPlaceholder() {
             const ph = document.getElementById('empty-placeholder');
             if (ph) ph.remove();
         }
 
-        /**
-         * Smoothly scrolls the message list to the very bottom.
-         * Called after every new bubble or system message is inserted.
-         */
-        function scrollToBottom() {
-            const list = document.getElementById('liste_messages');
-            list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
+        function scrollVersLeBas() {
+            const liste = document.getElementById('liste_messages');
+            liste.scrollTo({ top: liste.scrollHeight, behavior: 'smooth' });
         }
 
-
-        // ── DOM builders ────────────────────────────────────────
-
-        /**
-         * Creates and appends a chat bubble to the message list.
-         *
-         * Structure rendered:
-         *   <li class="msg-row row-moi|row-autre">
-         *     <div class="avatar avatar-moi|avatar-autre">XX</div>
-         *     <div class="bubble-stack">
-         *       [<div class="nom-auteur">Name</div>]   ← only for others
-         *       <div class="bulle bulle-moi|bulle-autre">text</div>
-         *     </div>
-         *   </li>
-         *
-         * @param {string} author  - sender's username
-         * @param {string} text    - message content
-         */
-        function addBubble(author, text) {
+        function ajouterBulle(auteur, texte) {
             clearPlaceholder();
+            const liste = document.getElementById('liste_messages');
+            const isMoi = (auteur === username);
 
-            const list  = document.getElementById('liste_messages');
-            const isMe  = (author === username);
-
-            // Row wrapper — direction depends on sender
             const row = document.createElement('li');
-            row.className = `msg-row ${isMe ? 'row-moi' : 'row-autre'}`;
+            row.className = `msg-row ${isMoi ? 'row-moi' : 'row-autre'}`;
 
-            // Avatar circle with initials
             const avatar = document.createElement('div');
-            avatar.className = `avatar ${isMe ? 'avatar-moi' : 'avatar-autre'}`;
-            avatar.textContent = initials(author);
+            avatar.className = `avatar ${isMoi ? 'avatar-moi' : 'avatar-autre'}`;
+            avatar.textContent = initials(auteur);
 
-            // Bubble stack (name label + bubble)
             const stack = document.createElement('div');
             stack.className = 'bubble-stack';
 
-            // Show sender name above the bubble only for other people's messages
-            if (!isMe) {
+            if (!isMoi) {
                 const nameTag = document.createElement('div');
                 nameTag.className = 'nom-auteur';
-                nameTag.textContent = author;
+                nameTag.textContent = auteur;
                 stack.appendChild(nameTag);
             }
 
-            // The bubble itself
-            const bubble = document.createElement('div');
-            bubble.className = `bulle ${isMe ? 'bulle-moi' : 'bulle-autre'}`;
-            bubble.textContent = text;
-            stack.appendChild(bubble);
+            const bulle = document.createElement('div');
+            bulle.className = `bulle ${isMoi ? 'bulle-moi' : 'bulle-autre'}`;
+            bulle.textContent = texte;
+            stack.appendChild(bulle);
 
             row.appendChild(avatar);
             row.appendChild(stack);
-            list.appendChild(row);
-            scrollToBottom();
+            liste.appendChild(row);
+            scrollVersLeBas();
         }
 
-
-        // ── Room management ─────────────────────────────────────
-
-        /**
-         * Called when the user clicks "Join →" or presses Enter in the room input.
-         * Hides the join panel, shows the chat zone, and emits a 'join' event
-         * to the server so this socket is added to the correct Socket.IO room.
-         */
-        function joinRoom() {
+        function rejoindreRoom() {
             const inputRoom = document.getElementById('nom_room').value.trim();
-
             if (inputRoom !== "") {
-                currentRoom = inputRoom;
-
-                // Tell the server to add this socket to the room.
-                socket.emit('join', { username: username, room: currentRoom });
-
-                // Switch UI from join panel → chat zone.
+                roomActuelle = inputRoom;
+                socket.emit('join', { username: username, room: roomActuelle });
                 document.getElementById('choix_room').style.display = 'none';
                 document.getElementById('btn_quitter').style.display = 'inline-flex';
                 document.getElementById('zone_chat').style.display = 'flex';
-
-                // Update the header title to show the room name.
-                document.getElementById('titre_room').textContent = currentRoom;
-
-                // Reset the message list with the empty-state placeholder.
+                document.getElementById('titre_room').textContent = roomActuelle;
                 document.getElementById('liste_messages').innerHTML =
-                    '<li class="empty-state" id="empty-placeholder">' +
-                    '<span class="empty-icon">✦</span>' +
-                    '<span class="empty-label">No messages yet</span></li>';
+                    '<li class="empty-state" id="empty-placeholder"><span class="empty-icon">✦</span><span class="empty-label">Aucun message pour l\'instant</span></li>';
             }
         }
 
-        /**
-         * Called when the user clicks "Leave 🚪".
-         * Notifies the server, then resets the UI back to the join panel.
-         */
-        function leaveRoom() {
-            // Step 1 — tell the server this socket is leaving the room.
-            socket.emit('quitter_salon', { room: currentRoom, username: username });
+        function quitterLeSalon() {
+            // 1. On prévient le serveur qu'on s'en va
+            socket.emit('quitter_salon', { room: roomActuelle, username: username });
 
-            // Step 2 — hide chat, show join panel, hide leave button.
+            // 2. On change l'interface : on cache le chat, on cache le bouton "Sortir", on montre l'accueil
             document.getElementById('zone_chat').style.display = 'none';
             document.getElementById('btn_quitter').style.display = 'none';
             document.getElementById('choix_room').style.display = 'block';
 
-            // Step 3 — reset header text to default values.
-            document.getElementById('titre_room').textContent = 'Home';
-            document.getElementById('membres_en_ligne').textContent =
-                'A calm, real-time messaging experience.';
-
-            // Step 4 — clear the current room reference.
-            currentRoom = "";
+            // 3. On remet les textes par défaut dans l'en-tête
+            document.getElementById('titre_room').textContent = 'Accueil';
+            document.getElementById('membres_en_ligne').textContent = 'Une interface douce, calme et en temps réel.';
+            
+            // 4. On oublie dans quel salon on était
+            roomActuelle = "";
         }
 
-
-        // ── Sending messages ────────────────────────────────────
-
-        /**
-         * Reads the message input, emits 'send_message' to the server,
-         * then clears the field. The server will broadcast the message
-         * back to all sockets in the room (including ours) via
-         * 'receive_message', so we do NOT add the bubble here directly.
-         */
-        function sendMessage() {
-            const field = document.getElementById('mon_message');
-            const text  = field.value.trim();
-
-            if (text !== "") {
-                socket.emit("send_message", {
-                    room:     currentRoom,
-                    username: username,
-                    message:  text
-                });
-                field.value = '';
-                field.focus();
-            }
-        }
-
-
-        // ── Socket.IO event listeners ───────────────────────────
-
-        /**
-         * 'charger_historique' — received right after joining a room.
-         * The server sends an array of [username, message] pairs in
-         * chronological order; we render each as a bubble.
-         */
         socket.on('charger_historique', function(messages) {
-            messages.forEach(function(msg) {
-                addBubble(msg[0], msg[1]);
-            });
+            messages.forEach(function(msg) { ajouterBulle(msg[0], msg[1]); });
         });
 
-        /**
-         * 'receive_message' — a new message was sent in the current room.
-         * Payload: { room, username, message }
-         */
-        socket.on('receive_message', function(data) {
-            addBubble(data.username, data.message);
-        });
+        socket.on('receive_message', function(data) { ajouterBulle(data.username, data.message); });
 
-        /**
-         * 'system_message' — a server-side announcement (join/leave).
-         * Rendered as a centred pill rather than a chat bubble.
-         */
         socket.on('system_message', function(msg) {
             clearPlaceholder();
-            const list  = document.getElementById('liste_messages');
+            const liste = document.getElementById('liste_messages');
             const sysLi = document.createElement('li');
             sysLi.className = 'msg-systeme';
             sysLi.textContent = msg;
-            list.appendChild(sysLi);
-            scrollToBottom();
+            liste.appendChild(sysLi);
+            scrollVersLeBas();
         });
 
-        /**
-         * 'maj_utilisateurs' — triggered whenever someone joins or leaves.
-         * Updates the header sub-text with the live online count and the
-         * full registered-member list for the room.
-         * Payload: { en_ligne: string[], inscrits: string[] }
-         */
         socket.on('maj_utilisateurs', function(data) {
-            const subTitle = document.getElementById('membres_en_ligne');
-            subTitle.innerHTML =
-                `🟢 Online: <b>${data.en_ligne.join(', ')}</b>` +
-                ` &nbsp;|&nbsp; 👥 Members: ${data.inscrits.join(', ')}`;
+            const sousTitre = document.getElementById('membres_en_ligne');
+            sousTitre.innerHTML = `🟢 En ligne : <b>${data.en_ligne.join(', ')}</b> &nbsp; | &nbsp; 👥 Inscrits : ${data.inscrits.join(', ')}`;
         });
 
-        /**
-         * 'erreur' — server-side error (e.g. auth / security violation).
-         * Shows an alert and resets the UI to the join panel.
-         */
         socket.on('erreur', function(data) {
-            alert("🔒 SECURITY: " + data.message);
+            alert("🔒 SÉCURITÉ : " + data.message);
             document.getElementById('choix_room').style.display = 'block';
             document.getElementById('zone_chat').style.display  = 'none';
         });
 
+        function envoyerMessage() {
+            const champ = document.getElementById('mon_message');
+            const texte = champ.value.trim();
+            if (texte !== "") {
+                socket.emit("send_message", { room: roomActuelle, username: username, message: texte });
+                champ.value = '';
+                champ.focus();
+            }
+        }
 
-        // ── Keyboard shortcuts ───────────────────────────────────
-
-        // Enter in the message box → send the message.
         document.getElementById("mon_message").addEventListener("keypress", function(e) {
-            if (e.key === "Enter") { e.preventDefault(); sendMessage(); }
+            if (e.key === "Enter") { e.preventDefault(); envoyerMessage(); }
         });
-
-        // Enter in the room-name box → join the room.
         document.getElementById("nom_room").addEventListener("keypress", function(e) {
-            if (e.key === "Enter") { e.preventDefault(); joinRoom(); }
+            if (e.key === "Enter") { e.preventDefault(); rejoindreRoom(); }
         });
     </script>
 </body>
