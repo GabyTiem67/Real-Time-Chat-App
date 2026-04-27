@@ -19,10 +19,16 @@ Typical request flow:
   6. Disconnect / leave events update the online-users tracker.
 """
 
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, url_for, session
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, send, emit, join_room, leave_room
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
+
+
+
 
 # ---------------------------------------------------------------------------
 # App & SocketIO initialisation
@@ -34,7 +40,7 @@ app = Flask(__name__)
 # in production (e.g. generated with: python -c "import secrets; print(secrets.token_hex(32))")
 app.config['SECRET_KEY'] = 'une_cle_secrete_tres_complexe_et_longue_12345!'
 
-socketio = SocketIO(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # ---------------------------------------------------------------------------
 # In-memory presence tracker
